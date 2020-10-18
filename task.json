@@ -1,0 +1,28 @@
+{
+  "atomCode": "downloadArtifact",
+  "execution": {
+    "packagePath": "downloadArtifact-jar-with-dependencies.jar",
+    "language": "java",
+    "minimumVersion": "1.8",
+    "demands": [],
+    "target": "$bk_java_path -jar downloadArtifact-jar-with-dependencies.jar -Dfile.encoding=utf8"
+  },
+  "input": {
+    "srcPaths": {
+      "required": true,
+      "label": "待下载文件路径",
+      "placeholder": "文件名支持*通配符，多个路径用逗号隔开",
+      "default": "",
+      "desc": " 版本仓库构件的路径，例如：tmp/aa.txt",
+      "type": "vuex-input"
+    },
+    "destPath": {
+      "label": "下载文件目标路径",
+      "placeholder": "不填则为当前工作空间路径",
+      "default": "",
+      "desc": " 下载到本地的路径，只支持相对路径前面默认拼接工作空间支持./和/",
+      "type": "vuex-input"
+    }
+  }
+}
+
