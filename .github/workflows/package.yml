@@ -8,7 +8,7 @@ on:
       - '.gitignore'
 
 env:
-  FILENAME: uploadArtifact
+  FILENAME: downloadArtifact
 jobs:
   # This workflow contains a single job called "build"
   build:
