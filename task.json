@@ -8,20 +8,165 @@
     "target": "$bk_java_path -jar downloadArtifact-jar-with-dependencies.jar -Dfile.encoding=utf8"
   },
   "input": {
+    "repoName":{
+      "type": "enum-input",
+      "default": "pipeline",
+      "required": true,
+      "list": [
+        {
+          "value": "pipeline",
+          "label": "流水线仓库"
+        },
+        {
+          "value": "custom",
+          "label": "自定义仓库"
+        }
+      ]
+    },
+    "targetPipelineId": {
+      "label": "流水线",
+      "placeholder": "请选择",
+      "default": "",
+      "type": "select-input",
+      "optionsConf": {
+        "searchable": true,
+        "multiple": false,
+        "url": "/process/api/user/archive/{projectId}/getAllPipelines?page=1&pagesize=-1",
+        "paramId": "pipelineId",
+        "paramName": "pipelineName"
+      },
+      "rely": {
+        "operation": "AND",
+        "expression": [
+          {
+            "key": "repoName",
+            "value": "pipeline"
+          }
+        ]
+      }
+    },
+    "latestBuildNum": {
+      "label": "构建号",
+      "type": "enum-input",
+      "default": true,
+      "list": [
+        {
+          "label": "最新构建号",
+          "value": true
+        },
+        {
+          "label": "指定构建号",
+          "value": false
+        }
+      ],
+      "rely": {
+        "operation": "AND",
+        "expression": [
+          {
+            "key": "repoName",
+            "value": "pipeline"
+          }
+        ]
+      }
+    },
+    "isSuccessfulBuild": {
+      "text": "是否提取最近构建成功的文件",
+      "type": "atom-checkbox",
+      "default": false,
+      "desc": "最新流水线构建号如果失败可能导致拉取不到构件，这时可以选择此选项选取最新构建成功的构件",
+      "rely": {
+        "operation": "AND",
+        "expression": [
+          {
+            "key": "repoName",
+            "value": "pipeline"
+          },
+          {
+            "key": "latestBuildNum",
+            "value": true
+          }
+        ]
+      }
+    },
+    "buildNum": {
+      "placeholder": "请选择",
+      "default": "",
+      "type": "select-input",
+      "optionsConf": {
+        "searchable": true,
+        "multiple": false,
+        "url": "/process/api/user/archive/{projectId}/pipelines/{targetPipelineId}/getAllBuildNo?page=1&pagesize=-1",
+        "paramId": "key",
+        "paramName": "key"
+      },
+      "rely": {
+        "operation": "AND",
+        "expression": [
+          {
+            "key": "repoName",
+            "value": "pipeline"
+          },
+          {
+            "key": "latestBuildNum",
+            "value": false
+          }
+        ]
+      }
+    },
     "srcPaths": {
       "required": true,
       "label": "待下载文件路径",
-      "placeholder": "文件名支持*通配符，多个路径用逗号隔开",
+      "placeholder": "文件名支持*通配符，多个路径用英文逗号隔开",
       "default": "",
-      "desc": " 版本仓库构件的路径，例如：tmp/aa.txt",
+      "desc": "流水线仓库只需要填写文件名，例如artifact.zip\n自定义仓库需要填写文件完整路径，例如/release/artifact.zip",
       "type": "vuex-input"
     },
     "destPath": {
       "label": "下载文件目标路径",
       "placeholder": "不填则为当前工作空间路径",
-      "default": "",
-      "desc": " 下载到本地的路径，只支持相对路径前面默认拼接工作空间支持./和/",
+      "default": "./",
+      "desc": " 下载到本地的路径，只支持相对路径，前面默认拼接工作空间",
       "type": "vuex-input"
+    },
+    "rangeDownload": {
+      "label": "是否开启支持分片断点下载",
+      "type": "enum-input",
+      "default": false,
+      "list": [
+        {
+          "label": "开启",
+          "value": true
+        },
+        {
+          "label": "关闭",
+          "value": false
+        }
+      ],
+      "required": true
+    },
+    "ignoreDigestCheck":{
+      "label":"关闭文件md5值校验",
+      "type":"enum-input",
+      "default":false,
+      "list":[
+        {
+          "label":"是",
+          "value":true
+        },
+        {
+          "label":"否",
+          "value":false
+        }
+      ],
+      "rely":{
+        "operation":"AND",
+        "expression":[
+          {
+            "key":"rangeDownload",
+            "value":true
+          }
+        ]
+      }
     }
   }
 }

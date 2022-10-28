@@ -1,4 +1,4 @@
-package com.tencent.bk.devops.atom.task;
+package com.tencent.bk.devops.atom.task.pojo
 
 data class PipelineBuildMaterial(
     val aliasName: String?,

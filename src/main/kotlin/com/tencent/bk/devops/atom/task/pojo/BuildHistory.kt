@@ -1,4 +1,4 @@
-package com.tencent.bk.devops.atom.task;
+package com.tencent.bk.devops.atom.task.pojo
 
 data class BuildHistory(
     val id: String,
@@ -18,7 +18,7 @@ data class BuildHistory(
     val remark: String?,
     val totalTime: Long?,
     val executeTime: Long?,
-    val buildParameters: List<BuildParameters>?,
+    val buildParameters: List<BuildParameter>?,
     val webHookType: String?,
     val startType: String?,
     val recommendVersion: String?,
