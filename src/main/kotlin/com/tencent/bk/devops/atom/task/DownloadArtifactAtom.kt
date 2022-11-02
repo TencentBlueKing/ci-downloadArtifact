@@ -88,6 +88,7 @@ class DownloadArtifactAtom : TaskAtom<DownloadArtifactParam> {
             downloadApi.getSingleBuildHistory(projectId, srcPipelineId, targetBuildNo)
         } else if (useLatestSuccessBuild) { // 最近成功构建号
             downloadApi.getLatestSuccessBuild(projectId, srcPipelineId)
+                ?: throw AtomException("pipeline does not have successful build")
         } else { // 最新构建号
             var targetBuildNum = "-1"
             if (currentPipelineId == srcPipelineId) { // 如果是当前流水线，最新构建号判定为本次执行

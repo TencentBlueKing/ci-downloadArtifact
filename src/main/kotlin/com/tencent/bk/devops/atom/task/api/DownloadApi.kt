@@ -137,28 +137,12 @@ class DownloadApi : BaseApi() {
             }
         }
 
-    fun getLatestSuccessBuild(projectId: String, pipelineId: String): BuildHistory {
+    fun getLatestSuccessBuild(projectId: String, pipelineId: String): BuildHistory? {
         val url = "/process/api/build/builds/$projectId/$pipelineId/latestSuccessBuild"
         val request = atomHttpClient.buildAtomGet(url)
         val responseContent = atomHttpClient.doRequestWithContent(request)
         val result: Result<BuildHistory> = responseContent.readJsonString()
-        return result.data!!
-    }
-
-    fun getPipelineName(projectId: String, pipelineId: String): String? {
-        val url = "/process/api/build/pipelines/$projectId/getPipelineNames"
-        val pipelineIds: MutableSet<String> = HashSet()
-        pipelineIds.add(pipelineId)
-        val request = atomHttpClient.buildAtomPost(
-            url,
-            RequestBody.create(
-                "application/json; charset=utf-8".toMediaTypeOrNull(),
-                JsonUtil.toJson<Set<String>>(pipelineIds)
-            )
-        )
-        val responseContent = atomHttpClient.doRequestWithContent(request!!)
-        val result: Result<Map<String, String>> = responseContent.readJsonString()
-        return result.data[pipelineId]
+        return result.data
     }
 
     fun getSingleBuildHistory(projectId: String, pipelineId: String, buildNum: String): BuildHistory {
