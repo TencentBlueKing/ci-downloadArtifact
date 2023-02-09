@@ -101,6 +101,7 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>zh-cn</id>
                         <phase>package</phase>
                         <goals>
                             <goal>single</goal>
@@ -108,6 +109,19 @@
                         <configuration>
                             <descriptors>
                                 <descriptor>package/assemblies/assembly.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>en</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <finalName>downloadArtifact_en</finalName>
+                            <descriptors>
+                                <descriptor>package/assemblies/assembly_en.xml</descriptor>
                             </descriptors>
                         </configuration>
                     </execution>
