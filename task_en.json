@@ -170,7 +170,7 @@
     }
   },
   "releaseInfo": {
-    "projectId": "Demo",
+    "projectId": "demo",
     "name": "downloadArtifact",
     "language": "java",
     "logoUrl": "${{indexFile(\"downloadArtifact.png\")}}",
