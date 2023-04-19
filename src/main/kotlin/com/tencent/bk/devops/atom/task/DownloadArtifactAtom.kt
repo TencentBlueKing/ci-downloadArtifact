@@ -86,6 +86,7 @@ class DownloadArtifactAtom : TaskAtom<DownloadArtifactParam> {
 
         val buildHistory = if (!downloadLatestBuildNo) { // 指定构建号
             downloadApi.getSingleBuildHistory(projectId, srcPipelineId, targetBuildNo)
+                ?: throw AtomException("pipeline does not have No.$targetBuildNo build")
         } else if (useLatestSuccessBuild) { // 最近成功构建号
             downloadApi.getLatestSuccessBuild(projectId, srcPipelineId)
                 ?: throw AtomException("pipeline does not have successful build")
@@ -95,6 +96,7 @@ class DownloadArtifactAtom : TaskAtom<DownloadArtifactParam> {
                 targetBuildNum = currentBuildNum
             }
             downloadApi.getSingleBuildHistory(projectId, srcPipelineId, targetBuildNum)
+                ?: throw AtomException("pipeline does not have No.$targetBuildNum build")
         }
         val downloadFileList = downloadFile(
             userId = userId,

@@ -4,8 +4,10 @@ import com.tencent.bk.devops.atom.api.SdkEnv
 import okhttp3.Headers.Companion.toHeaders
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
@@ -17,6 +19,7 @@ class AtomHttpClient {
         .connectTimeout(10L, TimeUnit.SECONDS)
         .readTimeout(60L, TimeUnit.SECONDS)
         .writeTimeout(60L, TimeUnit.SECONDS)
+        .protocols(listOf(Protocol.HTTP_1_1))
         .build()
 
     private val longHttpClient = OkHttpClient.Builder()
@@ -61,7 +64,7 @@ class AtomHttpClient {
     }
 
     fun buildAtomPost(path: String, headers: MutableMap<String, String> = mutableMapOf()): Request {
-        val requestBody = RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), "")
+        val requestBody = "".toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
         return buildAtomPost(path, requestBody, headers)
     }
 
@@ -80,7 +83,7 @@ class AtomHttpClient {
     }
 
     fun buildAtomPut(path: String, headers: MutableMap<String, String>): Request {
-        val requestBody = RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), "")
+        val requestBody = "".toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
         return buildAtomPut(path, requestBody, headers)
     }
 

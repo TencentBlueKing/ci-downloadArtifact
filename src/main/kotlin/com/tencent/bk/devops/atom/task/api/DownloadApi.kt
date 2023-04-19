@@ -1,14 +1,16 @@
 package com.tencent.bk.devops.atom.task.api
 
 import com.tencent.bk.devops.atom.api.BaseApi
+import com.tencent.bk.devops.atom.api.SdkEnv
 import com.tencent.bk.devops.atom.exception.AtomException
 import com.tencent.bk.devops.atom.pojo.Result
 import com.tencent.bk.devops.atom.task.pojo.BuildHistory
 import com.tencent.bk.devops.atom.task.pojo.QueryData
 import com.tencent.bk.devops.atom.task.pojo.QueryNodeInfo
 import com.tencent.bk.devops.atom.task.utils.FileDownloader
-import com.tencent.bk.devops.atom.utils.json.JsonUtil
+import com.tencent.bkrepo.common.api.constant.HttpHeaders
 import com.tencent.bkrepo.common.api.constant.MediaTypes
+import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.common.api.util.readJsonString
 import com.tencent.bkrepo.common.api.util.toJsonString
@@ -18,17 +20,25 @@ import com.tencent.bkrepo.common.query.model.PageLimit
 import com.tencent.bkrepo.common.query.model.QueryModel
 import com.tencent.bkrepo.common.query.model.Rule
 import com.tencent.bkrepo.common.query.model.Sort
+import com.tencent.bkrepo.generic.pojo.TemporaryAccessToken
+import com.tencent.bkrepo.repository.pojo.token.TemporaryTokenCreateRequest
+import com.tencent.bkrepo.repository.pojo.token.TokenType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
-import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 
 class DownloadApi : BaseApi() {
     private val atomHttpClient = AtomHttpClient()
+    private val fileGateway by lazy { SdkEnv.getFileGateway() }
+    private val tokenRequest by lazy { fileGateway.isNotBlank() }
+    private var token: String = ""
+
 
     fun download(
         userId: String,
@@ -63,13 +73,18 @@ class DownloadApi : BaseApi() {
         ignoreDigestCheck: Boolean
     ) {
         val encodedPath = urlEncode(path)
-        val url = "/bkrepo/api/build/generic/$projectId/$repoName/$encodedPath"
-        val headers = mutableMapOf(HEADER_BKREPO_UID to userId)
-        val request = atomHttpClient.buildAtomGet(url, headers)
-        if (!rangeDownloader) {
-            logger.info("using default method to download...")
-            download(request, destPath, size)
+        val url = if (tokenRequest) {
+            token = createToken(userId, projectId, repoName)
+            "$fileGateway/generic/temporary/download/$projectId/$repoName/$encodedPath?token=$token"
         } else {
+            "/bkrepo/api/build/generic/$projectId/$repoName/$encodedPath"
+        }
+        val headers = mutableMapOf(HEADER_BKREPO_UID to userId)
+        if (token.isNotBlank()) {
+            headers[HttpHeaders.AUTHORIZATION] = "Temporary $token"
+        }
+        val request = atomHttpClient.buildAtomGet(url, headers)
+        if (rangeDownloader && size > 0) {
             val fileDownloader = FileDownloader(request, destPath, ignoreDigestCheck)
             fileDownloader.removeFiles()
             val action = { fileDownloader.downloadFile() }
@@ -77,49 +92,76 @@ class DownloadApi : BaseApi() {
             if (result.isNotEmpty()) {
                 throw AtomException("download error: $result")
             }
+        } else {
+            logger.info("using default method to download...")
+            download(request, destPath, size)
         }
     }
 
     fun download(request: Request, destPath: File, size: Long) {
-        okHttpClient.newBuilder().build().newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw AtomException("get $request failed, response code: ${response.code}")
-            download(response, destPath, size)
+        okHttpClient.newBuilder().addInterceptor {
+            logger.info("url: ${it.request().url}")
+            it.proceed(it.request())
+        }.build().newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw AtomException("get $request failed, response code: ${response.code}")
+            }
+            if (!destPath.parentFile.exists()) {
+                destPath.parentFile.mkdirs()
+            }
+            val target = destPath.canonicalPath
+            logger.info("save file to: $target, size $size byte(s)")
+            var readBytes = 0L
+            val doubleSize = size.toDouble()
+            val startTime = System.currentTimeMillis()
+            response.body!!.byteStream().use { bs ->
+                val buf = ByteArray(4096)
+                var logTime = System.currentTimeMillis()
+                var len = bs.read(buf)
+                FileOutputStream(destPath).use { fos ->
+                    logger.info("$target >>> 0.0%\n")
+                    while (len != -1) {
+                        fos.write(buf, 0, len)
+                        len = bs.read(buf)
+                        readBytes += len
+                        val now = System.currentTimeMillis()
+                        if ((now - logTime) > 3000) {
+                            logger.info("$target >>> ${String.format("%.1f", readBytes / doubleSize * 100)}%\n")
+                            logTime = now
+                        }
+                    }
+                    logger.info("$target >>> 100%\n")
+                }
+            }
+            logger.info("file transfer time: ${String.format("%.2f", (System.currentTimeMillis() - startTime) / 1000.0)} second(s)")
         }
     }
 
-    private fun download(response: okhttp3.Response, destPath: File, size: Long) {
-        if (response.code == 404) {
-            throw AtomException("文件不存在")
+    private fun createToken(userId: String, projectId: String, repoName: String): String {
+        if (token.isNotBlank()) {
+            return token
         }
-        if (!response.isSuccessful) {
-            throw AtomException("获取文件失败")
+        val tokenCreateRequest = TemporaryTokenCreateRequest(
+            projectId,
+            repoName,
+            setOf(StringPool.ROOT),
+            setOf(userId),
+            emptySet(),
+            TimeUnit.DAYS.toSeconds(1),
+            null,
+            TokenType.ALL
+        )
+        val request = buildPost(
+            "/bkrepo/api/build/generic/temporary/token/create",
+            tokenCreateRequest.toJsonString().toRequestBody(MediaTypes.APPLICATION_JSON.toMediaTypeOrNull()),
+            mutableMapOf(HEADER_BKREPO_UID to userId)
+        )
+        val (status, response) = doRequest(request)
+        if (status == 200) {
+            return response.readJsonString<Response<List<TemporaryAccessToken>>>().data!!.first().token
+        } else {
+            throw AtomException(response)
         }
-        if (!destPath.parentFile.exists()) destPath.parentFile.mkdirs()
-        val target = destPath.canonicalPath
-        logger.info("save file to: $target, size $size byte(s)")
-        var readBytes = 0L
-        val doubleSize = size.toDouble()
-        val startTime = System.currentTimeMillis()
-        response.body!!.byteStream().use { bs ->
-            val buf = ByteArray(4096)
-            var logTime = System.currentTimeMillis()
-            var len = bs.read(buf)
-            FileOutputStream(destPath).use { fos ->
-                logger.info("$target >>> 0.0%\n")
-                while (len != -1) {
-                    fos.write(buf, 0, len)
-                    len = bs.read(buf)
-                    readBytes += len
-                    val now = System.currentTimeMillis()
-                    if ((now - logTime) > 3000) {
-                        logger.info("$target >>> ${String.format("%.1f", readBytes / doubleSize * 100)}%\n")
-                        logTime = now
-                    }
-                }
-                logger.info("$target >>> 100%\n")
-            }
-        }
-        logger.info("file transfer time: ${String.format("%.2f", (System.currentTimeMillis() - startTime) / 1000.0)} second(s)")
     }
 
     /**
@@ -141,16 +183,16 @@ class DownloadApi : BaseApi() {
         val url = "/process/api/build/builds/$projectId/$pipelineId/latestSuccessBuild"
         val request = atomHttpClient.buildAtomGet(url)
         val responseContent = atomHttpClient.doRequestWithContent(request)
-        val result: Result<BuildHistory> = responseContent.readJsonString()
+        val result: Result<BuildHistory?> = responseContent.readJsonString()
         return result.data
     }
 
-    fun getSingleBuildHistory(projectId: String, pipelineId: String, buildNum: String): BuildHistory {
+    fun getSingleBuildHistory(projectId: String, pipelineId: String, buildNum: String): BuildHistory? {
         val url = "/process/api/build/builds/$projectId/$pipelineId/$buildNum/history?channelCode=BS"
         val request = atomHttpClient.buildAtomGet(url)
         val responseContent = atomHttpClient.doRequestWithContent(request)
-        val result: Result<BuildHistory> = responseContent.readJsonString()
-        return result.data!!
+        val result: Result<BuildHistory?> = responseContent.readJsonString()
+        return result.data
     }
 
 
@@ -227,7 +269,30 @@ class DownloadApi : BaseApi() {
         }
     }
 
-    fun urlEncode(str: String?): String {
+    private fun doRequest(request: Request, retry: Int = 3): Pair<Int,String> {
+        try {
+            val response = atomHttpClient.doRequest(request)
+            val responseContent = response.body!!.string()
+            if (response.isSuccessful) {
+                return Pair(response.code, responseContent)
+            }
+            logger.debug("request url: ${request.url}, code: ${response.code}, response: $responseContent")
+            if (response.code > 499 && retry > 0) {
+                return doRequest(request, retry - 1)
+            }
+            return Pair(response.code, responseContent)
+        } catch (e: IOException) {
+            logger.error("request[${request.url}] error, ", e)
+            if (retry > 0) {
+                logger.info("retry after 3 seconds")
+                Thread.sleep(3 * 1000L)
+                return doRequest(request, retry - 1)
+            }
+            throw e
+        }
+    }
+
+    private fun urlEncode(str: String?): String {
         return if (str.isNullOrBlank()) {
             ""
         } else {
