@@ -35,8 +35,8 @@ import java.util.concurrent.TimeUnit
 
 class DownloadApi : BaseApi() {
     private val atomHttpClient = AtomHttpClient()
-    private val fileGateway by lazy { SdkEnv.getFileGateway() }
-    private val tokenRequest by lazy { fileGateway.isNotBlank() }
+    private val fileGateway: String? by lazy { SdkEnv.getFileGateway() }
+    private val tokenRequest by lazy { !fileGateway.isNullOrBlank() && fileGateway!!.contains("bkrepo") }
     private var token: String = ""
 
 
@@ -50,11 +50,25 @@ class DownloadApi : BaseApi() {
         rangeDownload: Boolean,
         ignoreDigestCheck: Boolean
     ) {
+        val encodedPath = urlEncode(path)
+        logger.info("fileGateway: $fileGateway")
+        val url = if (tokenRequest) {
+            token = createToken(userId, projectId, repoName)
+            val temporaryUrl = "$fileGateway/generic/temporary/download/$projectId/$repoName/$encodedPath?token=$token"
+            val request = Request.Builder().url(temporaryUrl).build()
+            atomHttpClient.doRequest(request).use {
+                if (!it.isSuccessful) {
+                    "/bkrepo/api/build/generic/$projectId/$repoName/$encodedPath"
+                } else {
+                    temporaryUrl
+                }
+            }
+        } else {
+            "/bkrepo/api/build/generic/$projectId/$repoName/$encodedPath"
+        }
         downloadFile(
             userId = userId,
-            projectId = projectId,
-            repoName = repoName,
-            path = path,
+            url = url,
             destPath = destPath,
             size = size,
             rangeDownloader = rangeDownload,
@@ -64,27 +78,18 @@ class DownloadApi : BaseApi() {
 
     private fun downloadFile(
         userId: String,
-        projectId: String,
-        repoName: String,
-        path: String,
+        url: String,
         destPath: File,
         size: Long,
         rangeDownloader: Boolean,
         ignoreDigestCheck: Boolean
     ) {
-        val encodedPath = urlEncode(path)
-        val url = if (tokenRequest) {
-            token = createToken(userId, projectId, repoName)
-            "$fileGateway/generic/temporary/download/$projectId/$repoName/$encodedPath?token=$token"
-        } else {
-            "/bkrepo/api/build/generic/$projectId/$repoName/$encodedPath"
-        }
         val headers = mutableMapOf(HEADER_BKREPO_UID to userId)
         if (token.isNotBlank()) {
             headers[HttpHeaders.AUTHORIZATION] = "Temporary $token"
         }
         val request = atomHttpClient.buildAtomGet(url, headers)
-        if (rangeDownloader && size > 0) {
+        if (rangeDownloader && size > 0 && !url.startsWith("/bkrepo/api/build")) {
             val fileDownloader = FileDownloader(request, destPath, ignoreDigestCheck)
             fileDownloader.removeFiles()
             val action = { fileDownloader.downloadFile() }
@@ -145,7 +150,7 @@ class DownloadApi : BaseApi() {
             projectId,
             repoName,
             setOf(StringPool.ROOT),
-            setOf(userId),
+            setOf(),
             emptySet(),
             TimeUnit.DAYS.toSeconds(1),
             null,
